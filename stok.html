@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stok Bahan Ajar - SITTA UT</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand-mark" href="index.html" aria-label="Beranda">UT</a>
+    <div><h1>SITTA <span>Universitas Terbuka</span></h1><p>Sistem Informasi Tiras dan Transaksi Bahan Ajar</p></div>
+    <nav class="top-nav"><a class="active" href="stok.html">Stok Bahan Ajar</a><a href="tracking.html">Tracking DO</a></nav>
+  </header>
+  <main id="app" class="container page-container">
+    <div class="page-heading">
+      <div><p class="eyebrow">INVENTARIS</p><h2>Stok Bahan Ajar</h2><p class="muted">Pantau jumlah stok, lokasi penyimpanan, dan kebutuhan pemesanan ulang.</p></div>
+      <button class="button primary" @click="bukaFormTambah">＋ Tambah Bahan Ajar</button>
+    </div>
+
+    <section class="stats-grid">
+      <article class="stat-card"><span>Total judul</span><strong>{{ stok.length }}</strong><small>Jenis bahan ajar</small></article>
+      <article class="stat-card"><span>Stok aman</span><strong class="green-text">{{ jumlahAman }}</strong><small>Stok memenuhi safety stock</small></article>
+      <article class="stat-card"><span>Perlu reorder</span><strong class="orange-text">{{ jumlahMenipis }}</strong><small>Di bawah safety stock</small></article>
+      <article class="stat-card"><span>Stok kosong</span><strong class="red-text">{{ jumlahKosong }}</strong><small>Qty sama dengan nol</small></article>
+    </section>
+
+    <section class="panel">
+      <div class="section-heading"><div><h3>Daftar persediaan</h3><p class="muted">Gunakan filter untuk mempersempit hasil.</p></div><span class="result-count">{{ stokTampil.length }} data ditampilkan</span></div>
+      <div class="filter-grid">
+        <label>UT-Daerah
+          <select v-model="filterUpbjj">
+            <option value="">Semua UT-Daerah</option>
+            <option v-for="upbjj in upbjjList" :key="upbjj" :value="upbjj">{{ upbjj }}</option>
+          </select>
+        </label>
+        <label v-if="filterUpbjj">Kategori Mata Kuliah
+          <select v-model="filterKategori">
+            <option value="">Semua kategori</option>
+            <option v-for="kategori in kategoriTersedia" :key="kategori" :value="kategori">{{ kategori }}</option>
+          </select>
+        </label>
+        <label v-else class="disabled-label">Kategori Mata Kuliah
+          <select disabled><option>Pilih UT-Daerah dahulu</option></select>
+        </label>
+        <label>Pengurutan
+          <select v-model="sortBy">
+            <option value="judul">Judul (A–Z)</option>
+            <option value="qty-asc">Stok (terendah)</option>
+            <option value="qty-desc">Stok (tertinggi)</option>
+            <option value="harga-asc">Harga (termurah)</option>
+            <option value="harga-desc">Harga (termahal)</option>
+          </select>
+        </label>
+      </div>
+      <div class="filter-options">
+        <label class="check-label"><input type="checkbox" v-model="hanyaPerluReorder"> Tampilkan stok di bawah safety stock</label>
+        <label class="check-label"><input type="checkbox" v-model="hanyaKosong"> Hanya stok kosong (qty = 0)</label>
+        <button class="button text-button" @click="resetFilter">Reset filter</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Kode / Mata Kuliah</th><th>Kategori</th><th>UT-Daerah</th><th>Lokasi Rak</th><th>Qty</th><th>Safety</th><th>Status</th><th>Catatan</th><th>Aksi</th></tr></thead>
+          <tbody>
+            <tr v-for="item in stokTampil" :key="item.kode">
+              <td><strong>{{ item.kode }}</strong><span class="cell-subtitle">{{ item.judul }}</span></td>
+              <td><span class="category-pill">{{ item.kategori }}</span></td><td>{{ item.upbjj }}</td><td>{{ item.lokasiRak }}</td>
+              <td><strong>{{ item.qty }}</strong></td><td>{{ item.safety }}</td>
+              <td><span class="status" :class="kelasStatus(item)"> <span>{{ simbolStatus(item) }}</span> {{ statusStok(item) }}</span></td>
+              <td><span v-html="item.catatanHTML"></span></td>
+              <td><button class="button small secondary" @click="bukaFormEdit(item)">Edit</button></td>
+            </tr>
+            <tr v-if="stokTampil.length === 0"><td colspan="9" class="empty-state">Tidak ada data yang sesuai dengan filter.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section v-if="tampilkanForm" class="panel form-panel">
+      <div class="section-heading"><div><h3>{{ modeForm === 'edit' ? 'Edit stok bahan ajar' : 'Tambah bahan ajar baru' }}</h3><p class="muted">Isi semua kolom wajib dengan data yang valid.</p></div><button class="icon-button" @click="tutupForm" aria-label="Tutup formulir">×</button></div>
+      <form @submit.prevent="simpanStok">
+        <div class="form-grid">
+          <label>Kode mata kuliah <input ref="inputKode" v-model.trim="form.kode" :disabled="modeForm === 'edit'" required maxlength="20" placeholder="Contoh: MKDU4101"></label>
+          <label>Judul mata kuliah <input v-model.trim="form.judul" required maxlength="120" placeholder="Nama bahan ajar"></label>
+          <label>Kategori <select v-model="form.kategori" required><option disabled value="">Pilih kategori</option><option v-for="kategori in kategoriList" :key="kategori">{{ kategori }}</option></select></label>
+          <label>UT-Daerah <select v-model="form.upbjj" required><option disabled value="">Pilih UT-Daerah</option><option v-for="upbjj in upbjjList" :key="upbjj">{{ upbjj }}</option></select></label>
+          <label>Lokasi rak <input v-model.trim="form.lokasiRak" required maxlength="30" placeholder="Contoh: R1-A1"></label>
+          <label>Harga (Rp) <input type="number" v-model.number="form.harga" min="0" step="1000" required></label>
+          <label>Jumlah stok <input type="number" v-model.number="form.qty" min="0" step="1" required></label>
+          <label>Safety stock <input type="number" v-model.number="form.safety" min="0" step="1" required></label>
+          <label class="full-width">Catatan (boleh menggunakan HTML sederhana) <textarea v-model.trim="form.catatanHTML" rows="2" placeholder="Catatan bahan ajar"></textarea></label>
+        </div>
+        <p v-if="pesanError" class="form-error">{{ pesanError }}</p>
+        <div class="form-actions"><button type="button" class="button secondary" @click="tutupForm">Batal</button><button class="button primary" type="submit">{{ modeForm === 'edit' ? 'Simpan perubahan' : 'Simpan bahan ajar' }}</button></div>
+      </form>
+    </section>
+    <div v-if="pesanSukses" class="toast" role="status">{{ pesanSukses }} <button @click="pesanSukses = ''">×</button></div>
+  </main>
+  <footer>© 2026 SITTA UT · Tugas Praktik 2 Vue.js</footer>
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.js"></script>
+  <script src="js/dataBahanAjar.js"></script>
+  <script src="js/stok-app.js"></script>
+</body>
+</html>
